@@ -1,14 +1,17 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from typing import Optional, List
 
 from .database import models, operations, auth as auth_module
+from .database.models import get_db
 from .ml_models.suggestions import generate_prediagnosis
 from . import schemas
 
 # Initialize FastAPI app
+router = APIRouter()
+
 app = FastAPI(
     title="Fast Aid API",
     description="Medical prediagnosis and consultation API",
@@ -27,16 +30,7 @@ app.add_middleware(
 # Security
 security = HTTPBearer()
 
-
 # ============= DEPENDENCY FUNCTIONS =============
-
-def get_db():
-    """Database session dependency"""
-    db = models.SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def get_current_user(
@@ -79,7 +73,7 @@ def get_current_doctor(current_user: models.User = Depends(get_current_user)) ->
 
 # ============= HEALTH CHECK =============
 
-@app.get("/", tags=["Health"])
+@router.get("/", tags=["Health"])
 def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "Fast Aid API"}
@@ -87,7 +81,7 @@ def health_check():
 
 # ============= AUTHENTICATION ENDPOINTS =============
 
-@app.post("/auth/register", response_model=schemas.UserResponse, tags=["Authentication"])
+@router.post("/auth/register", response_model=schemas.UserResponse, tags=["Authentication"])
 def register(user_data: schemas.UserRegister, db: Session = Depends(get_db)):
     """Register a new user (patient, doctor, or admin)"""
     # Check if user already exists
@@ -118,7 +112,7 @@ def register(user_data: schemas.UserRegister, db: Session = Depends(get_db)):
     return user
 
 
-@app.post("/auth/login", response_model=schemas.Token, tags=["Authentication"])
+@router.post("/auth/login", response_model=schemas.Token, tags=["Authentication"])
 def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
     """Login and receive JWT access token"""
     result = auth_module.login(db, credentials.email, credentials.password)
@@ -133,7 +127,7 @@ def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
     return result
 
 
-@app.get("/auth/me", response_model=schemas.UserResponse, tags=["Authentication"])
+@router.get("/auth/me", response_model=schemas.UserResponse, tags=["Authentication"])
 def get_current_user_info(current_user: models.User = Depends(get_current_user)):
     """Get current authenticated user information"""
     return current_user
@@ -141,7 +135,7 @@ def get_current_user_info(current_user: models.User = Depends(get_current_user))
 
 # ============= USER & MEDICAL HISTORY ENDPOINTS =============
 
-@app.get("/users/{user_id}", response_model=schemas.UserResponse, tags=["Users"])
+@router.get("/users/{user_id}", response_model=schemas.UserResponse, tags=["Users"])
 def get_user(
     user_id: int,
     current_user: models.User = Depends(get_current_user),
@@ -165,7 +159,7 @@ def get_user(
     return user
 
 
-@app.put("/users/{user_id}/medical-history", response_model=schemas.UserResponse, tags=["Users"])
+@router.put("/users/{user_id}/medical-history", response_model=schemas.UserResponse, tags=["Users"])
 def update_medical_history(
     user_id: int,
     medical_history: schemas.MedicalHistoryUpdate,
@@ -195,7 +189,7 @@ def update_medical_history(
 
 # ============= CONVERSATION ENDPOINTS =============
 
-@app.post("/conversations", response_model=schemas.ConversationResponse, tags=["Conversations"])
+@router.post("/conversations", response_model=schemas.ConversationResponse, tags=["Conversations"])
 def create_conversation(
     conversation_data: schemas.ConversationCreate,
     current_user: models.User = Depends(get_current_patient),
@@ -210,7 +204,7 @@ def create_conversation(
     return conversation
 
 
-@app.get("/conversations", response_model=List[schemas.ConversationResponse], tags=["Conversations"])
+@router.get("/conversations", response_model=List[schemas.ConversationResponse], tags=["Conversations"])
 def get_my_conversations(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -221,7 +215,7 @@ def get_my_conversations(
     return conversations
 
 
-@app.get("/conversations/{conversation_id}", response_model=schemas.ConversationWithMessages, tags=["Conversations"])
+@router.get("/conversations/{conversation_id}", response_model=schemas.ConversationWithMessages, tags=["Conversations"])
 def get_conversation(
     conversation_id: str,
     current_user: models.User = Depends(get_current_user),
@@ -253,7 +247,7 @@ def get_conversation(
     return conversation
 
 
-@app.put("/conversations/{conversation_id}/assign-doctor", response_model=schemas.ConversationResponse, tags=["Conversations"])
+@router.put("/conversations/{conversation_id}/assign-doctor", response_model=schemas.ConversationResponse, tags=["Conversations"])
 def assign_doctor(
     conversation_id: str,
     assignment: schemas.DoctorAssignment,
@@ -299,7 +293,7 @@ def assign_doctor(
 
 # ============= MESSAGE ENDPOINTS =============
 
-@app.post("/conversations/{conversation_id}/messages", response_model=schemas.MessageResponse, tags=["Messages"])
+@router.post("/conversations/{conversation_id}/messages", response_model=schemas.MessageResponse, tags=["Messages"])
 def create_message(
     conversation_id: str,
     message_data: schemas.MessageCreate,
@@ -348,7 +342,7 @@ def create_message(
     return message
 
 
-@app.get("/conversations/{conversation_id}/messages", response_model=List[schemas.MessageResponse], tags=["Messages"])
+@router.get("/conversations/{conversation_id}/messages", response_model=List[schemas.MessageResponse], tags=["Messages"])
 def get_messages(
     conversation_id: str,
     current_user: models.User = Depends(get_current_user),
@@ -384,7 +378,7 @@ def get_messages(
 
 # ============= PREDIAGNOSIS ENDPOINTS =============
 
-@app.post("/prediagnosis", response_model=schemas.PrediagnosisResponse, tags=["Prediagnosis"])
+@router.post("/prediagnosis", response_model=schemas.PrediagnosisResponse, tags=["Prediagnosis"])
 def create_prediagnosis(
     request: schemas.PrediagnosisRequest,
     current_user: models.User = Depends(get_current_patient),
@@ -395,7 +389,6 @@ def create_prediagnosis(
     patient_data = {
         "symptoms": request.symptoms,
         "duration": request.duration,
-        "severity": request.severity,
         "age": request.age or current_user.medical_history.get("age") if current_user.medical_history else None
     }
 
@@ -445,7 +438,7 @@ def create_prediagnosis(
     return prediagnosis
 
 
-@app.get("/prediagnosis/my", response_model=List[schemas.PrediagnosisResponse], tags=["Prediagnosis"])
+@router.get("/prediagnosis/my", response_model=List[schemas.PrediagnosisResponse], tags=["Prediagnosis"])
 def get_my_prediagnoses(
     current_user: models.User = Depends(get_current_patient),
     db: Session = Depends(get_db),
@@ -456,7 +449,7 @@ def get_my_prediagnoses(
     return prediagnoses
 
 
-@app.get("/conversations/{conversation_id}/prediagnosis", response_model=schemas.PrediagnosisResponse, tags=["Prediagnosis"])
+@router.get("/conversations/{conversation_id}/prediagnosis", response_model=schemas.PrediagnosisResponse, tags=["Prediagnosis"])
 def get_conversation_prediagnosis(
     conversation_id: str,
     current_user: models.User = Depends(get_current_user),
@@ -496,8 +489,5 @@ def get_conversation_prediagnosis(
     return prediagnosis
 
 
-# ============= RUN SERVER =============
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# Include router with /api prefix after all routes are defined
+app.include_router(router, prefix='/api')

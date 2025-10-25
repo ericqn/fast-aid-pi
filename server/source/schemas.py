@@ -54,7 +54,6 @@ class MedicalHistoryUpdate(BaseModel):
 class PrediagnosisRequest(BaseModel):
     symptoms: List[str] = Field(..., min_items=1)
     duration: str
-    severity: str = Field(..., pattern="^(mild|moderate|severe)$")
     age: Optional[int] = None
     conversation_id: Optional[str] = None
 

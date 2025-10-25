@@ -2,11 +2,15 @@ from datetime import datetime, timedelta
 from typing import Optional
 from passlib.context import CryptContext
 import jwt
+import os
 from sqlalchemy.orm import Session
+from dotenv import load_dotenv
 from . import models, operations
 
+load_dotenv()
+
 # Configuration
-SECRET_KEY = "your-secret-key-change-this-in-production"  # Change in production!
+SECRET_KEY = os.getenv('SECRET_KEY')  # Change in production!
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 

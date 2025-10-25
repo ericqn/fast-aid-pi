@@ -4,7 +4,8 @@ Test script for FastAPI endpoints with authentication
 import requests
 import json
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8000/api"
+
 
 def test_health_check():
     """Test health check endpoint"""
@@ -130,7 +131,6 @@ def test_create_prediagnosis(token, conversation_id=None):
     data = {
         "symptoms": ["headache", "dizziness", "fatigue"],
         "duration": "3 days",
-        "severity": "moderate",
         "age": 45
     }
     if conversation_id:
