@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@theme {
+  --color-health-primary: #0EA5E9;
+  --color-health-secondary: #06B6D4;
+  --color-health-success: #10B981;
+  --color-health-warning: #F59E0B;
+  --color-health-accent: #6366F1;
+  --color-health-dark: #1E293B;
+  --color-health-light: #F8FAFC;
+  --color-health-gray: #64748B;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-health-light);
+    color: var(--color-health-dark);
+  }
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
