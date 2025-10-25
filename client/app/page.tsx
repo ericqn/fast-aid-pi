@@ -40,9 +40,9 @@ export default function Home() {
 
   const [activeChat, setActiveChat] = useState<string>('1')
   const [inputMessage, setInputMessage] = useState('')
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
   const [actionItems, setActionItems] = useState<ActionItem[]>([
     {
       id: '1',
@@ -71,9 +71,11 @@ export default function Home() {
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 1024) { // lg breakpoint
-        setIsRightSidebarOpen(true)
+        setIsRightSidebarOpen(true);
+        setIsSidebarOpen(true);
       } else {
-        setIsRightSidebarOpen(false)
+        setIsRightSidebarOpen(false);
+        setIsSidebarOpen(false);
       }
     }
 
