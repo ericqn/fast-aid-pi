@@ -1,10 +1,12 @@
 'use client'
 
+import { AuthModal } from '@/components/AuthModal'
+import { Questionnaire } from '@/components/Questionnaire'
 import { useState } from 'react'
 
 type Message = {
   id: string
-  content: string
+  content: string | React.ReactNode
   role: 'user' | 'assistant'
   timestamp: Date
 }
@@ -31,6 +33,7 @@ export default function Home() {
   const [activeChat, setActiveChat] = useState<string>('1')
   const [inputMessage, setInputMessage] = useState('')
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const currentChat = chats.find(chat => chat.id === activeChat)
 
@@ -69,7 +72,8 @@ export default function Home() {
       id: Date.now().toString(),
       title: 'New Conversation',
       messages: [
-        { id: '1', content: 'Hello! How can I assist you today?', role: 'assistant', timestamp: new Date() }
+        { id: '1', content: 'Hello! How can I assist you today?', role: 'assistant', timestamp: new Date() },
+        { id: 'questionaire', content: <Questionnaire />, role: 'assistant', timestamp: new Date() }
       ],
       lastUpdated: new Date()
     }
@@ -92,16 +96,16 @@ export default function Home() {
         {/* Sidebar Header */}
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-xl font-semibold text-health-primary flex items-center gap-2">
+            <h1 className="text-xl font-semibold text-health-primary flex text-wrap items-center gap-2">
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
               </svg>
-              HealthChat
+              Chats
             </h1>
           </div>
           <button
             onClick={createNewChat}
-            className="w-full bg-health-primary text-white px-4 py-2.5 rounded-lg hover:bg-health-secondary transition-colors flex items-center justify-center gap-2 font-medium"
+            className="w-full bg-health-primary text-white px-2 py-2 rounded-lg hover:bg-health-secondary transition-colors flex items-center justify-center gap-2 font-medium"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -144,6 +148,19 @@ export default function Home() {
 
         {/* Sidebar Footer */}
         <div className="p-4 border-t border-gray-200 bg-gray-50">
+          <button
+            onClick={() => setIsAuthModalOpen(true)}
+            className="w-full bg-health-primary text-white px-4 py-2.5 rounded-lg hover:bg-health-secondary transition-colors flex items-center justify-center gap-2 font-medium text-sm"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            Sign In / Sign Up
+          </button>
+        </div>
+
+        {/* Sidebar Footer */}
+        <div className="p-4 border-t border-gray-200 bg-gray-50">
           <div className="flex items-center gap-3 text-xs text-health-gray">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -166,11 +183,6 @@ export default function Home() {
             </svg>
           </button>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-health-primary/10 rounded-full flex items-center justify-center">
-              <svg className="w-6 h-6 text-health-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
             <div>
               <h2 className="font-semibold text-health-dark">{currentChat?.title || 'Select a chat'}</h2>
               <p className="text-xs text-health-gray">Medical Assistant</p>
@@ -195,11 +207,13 @@ export default function Home() {
 
               <div
                 className={`max-w-2xl px-5 py-3 rounded-2xl ${message.role === 'user'
-                    ? 'bg-health-primary text-white rounded-tr-none'
-                    : 'bg-white border border-gray-200 text-health-dark rounded-tl-none shadow-sm'
+                  ? 'bg-health-primary text-white rounded-tr-none'
+                  : 'bg-white border border-gray-200 text-health-dark rounded-tl-none shadow-sm'
                   }`}
               >
-                <p className="text-sm leading-relaxed">{message.content}</p>
+                {typeof message.content === "string" ?
+                  <p className="text-sm leading-relaxed">{message.content as String}</p> : <>{message.content}</>
+                }
               </div>
 
               {message.role === 'user' && (
@@ -248,6 +262,8 @@ export default function Home() {
           </div>
         </div>
       </div>
+      {/* Auth Modal */}
+      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
     </div>
   )
 }
