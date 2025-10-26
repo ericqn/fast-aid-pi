@@ -1,5 +1,4 @@
 from source.app import app
-# ============= RUN SERVER =============
 
 if __name__ == "__main__":
     import uvicorn

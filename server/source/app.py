@@ -98,6 +98,7 @@ def register(user_data: schemas.UserRegister, db: Session = Depends(get_db)):
         "doctor": models.UserRole.DOCTOR,
         "admin": models.UserRole.ADMIN
     }
+
     role = role_map.get(user_data.role, models.UserRole.PATIENT)
 
     # Register user
@@ -206,9 +207,9 @@ def create_conversation(
 
 @router.get("/conversations", response_model=List[schemas.ConversationResponse], tags=["Conversations"])
 def get_my_conversations(
+    limit: int = 50,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
-    limit: int = 50
 ):
     """Get all conversations for the current user"""
     conversations = operations.get_user_conversations(db, current_user.id, limit)
@@ -289,6 +290,17 @@ def assign_doctor(
     )
 
     return updated_conversation
+
+@router.delete('/conversations/{conversation_id}/remove-doctor', response_model=schemas.ConversationResponse, tags=["Conversations"])
+def remove_doctor(
+    conversation_id: str,
+    assignment: schemas.DoctorAssignment,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    conversation = operations.get_conversation_by_id(db, conversation_id)
+
+    conversation
 
 
 # ============= MESSAGE ENDPOINTS =============

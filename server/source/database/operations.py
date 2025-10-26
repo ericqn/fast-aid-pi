@@ -96,6 +96,17 @@ def assign_doctor_to_conversation(db: Session, conversation_id: str, doctor_id: 
     return conversation
 
 
+def remove_doctor_from_conversation(db: Session, conversation_id: str) -> models.Conversation:
+    conversation = get_conversation_by_id(conversation_id=conversation_id)
+
+    if conversation and conversation.doctor_id:
+        conversation.doctor_id = None
+        conversation.updated_at = datetime.now()
+        db.commit()
+        db.refresh(conversation)
+    return conversation
+
+
 def update_conversation_title(db: Session, conversation_id: str, title: str) -> models.Conversation:
     """Update conversation title"""
     conversation = get_conversation_by_id(db, conversation_id)

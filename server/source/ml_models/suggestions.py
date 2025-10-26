@@ -57,7 +57,7 @@ def generate_prediagnosis(patient_data, medical_history: None):
     try:
         response = client.messages.create(
             model = "claude-3-5-haiku-20241022",
-            max_tokens = 1000,
+            max_tokens = 2000,
             temperature = 0.1,
             system = system_prompt,
             messages = [

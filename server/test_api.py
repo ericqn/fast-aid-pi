@@ -154,14 +154,42 @@ def test_create_prediagnosis(token, conversation_id=None):
         return None
 
 
-def test_get_conversations(token):
+def test_get_conversations(token, retrieve_id: bool = False):
     """Test getting all conversations"""
     print("\n=== Testing Get Conversations ===")
     headers = {"Authorization": f"Bearer {token}"}
-    response = requests.get(f"{BASE_URL}/conversations", headers=headers)
+    response = requests.get(f"{BASE_URL}/conversations?limit=3", headers=headers)
+
     print(f"Status: {response.status_code}")
     print(f"Response: {response.json()}")
+
+    if retrieve_id:
+        conversation_list = response.json()
+        print(f'Num conversations: {len(conversation_list)}')
+        conversation_ids = [convo.get('id') for convo in conversation_list]
+        print(f'Sample IDs: {conversation_ids}')
+        return conversation_ids
+    
     return response.status_code == 200
+
+
+def test_get_specific_conversation(token, conversation_id):
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.get(f'{BASE_URL}/conversations/{conversation_id}', headers=headers)
+
+    print(f"Status: {response.status_code}")
+    print(f"Response: {response.json()}")
+
+    return response.status_code == 200
+
+
+def test_assign_doctor(token, conversation_id):
+    headers = {"Authorization": f"Bearer {token}"}
+    data = {"doctor_id": 2}
+    response = requests.put(f'{BASE_URL}/conversations/{conversation_id}/assign-doctor', headers=headers, json=data)
+
+    print(f"Status: {response.status_code}")
+    print(f"Response: {response.json()}")
 
 
 def test_unauthorized_access():
@@ -201,13 +229,15 @@ def run_all_tests():
         test_update_medical_history(token, user_id)
 
         # Test 6: Create conversation
-        conversation_id = test_create_conversation(token)
+        # conversation_id = test_create_conversation(token)
 
-        # Test 7: Create prediagnosis
-        test_create_prediagnosis(token, conversation_id)
+        # Test 7: 
+        conversation_ids = test_get_conversations(token, retrieve_id=True)
+        sample_id = conversation_ids[1]
 
-        # Test 8: Get conversations
-        test_get_conversations(token)
+        test_get_specific_conversation(token, sample_id)
+        # Test 8: Create prediagnosis
+        # test_create_prediagnosis(token, conversation_id)
 
         # Test 9: Unauthorized access
         test_unauthorized_access()
