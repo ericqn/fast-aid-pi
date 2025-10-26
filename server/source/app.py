@@ -294,13 +294,25 @@ def assign_doctor(
 @router.delete('/conversations/{conversation_id}/remove-doctor', response_model=schemas.ConversationResponse, tags=["Conversations"])
 def remove_doctor(
     conversation_id: str,
-    assignment: schemas.DoctorAssignment,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     conversation = operations.get_conversation_by_id(db, conversation_id)
 
-    conversation
+    if not conversation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found"
+        )
+    
+    if not conversation.doctor_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Doctor not assigned yet"
+        )
+
+    conversation = operations.remove_doctor_from_conversation(db, conversation_id)
+    return conversation
 
 
 # ============= MESSAGE ENDPOINTS =============

@@ -185,12 +185,25 @@ def test_get_specific_conversation(token, conversation_id):
 
 def test_assign_doctor(token, conversation_id):
     headers = {"Authorization": f"Bearer {token}"}
-    data = {"doctor_id": 2}
+    data = {"doctor_id": 3}
     response = requests.put(f'{BASE_URL}/conversations/{conversation_id}/assign-doctor', headers=headers, json=data)
 
+    print(f'=== Testing doctor assignment ===')
     print(f"Status: {response.status_code}")
     print(f"Response: {response.json()}")
 
+
+def test_remove_doctor(token, conversation_id):
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.delete(f'{BASE_URL}/conversations/{conversation_id}/remove-doctor', headers=headers)
+
+    print(f'=== Testing doctor removal ===')
+    print(f'Status: {response.status_code}')
+    print(f'Response: {response.json()}')
+    doctor_id = response.json().get('doctor_id')
+    print(f'Doctor ID: {doctor_id}')
+
+    return doctor_id == None
 
 def test_unauthorized_access():
     """Test that endpoints are protected"""
@@ -236,6 +249,8 @@ def run_all_tests():
         sample_id = conversation_ids[1]
 
         test_get_specific_conversation(token, sample_id)
+        test_assign_doctor(token, sample_id)
+        test_remove_doctor(token, sample_id)
         # Test 8: Create prediagnosis
         # test_create_prediagnosis(token, conversation_id)
 
