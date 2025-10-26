@@ -1,6 +1,7 @@
 'use client'
 
 import { SetStateAction, useState } from 'react'
+import { useAuth } from './AuthContext'
 
 type AuthModalProps = {
   isOpen: boolean
@@ -8,7 +9,9 @@ type AuthModalProps = {
 }
 
 export function AuthModal({ isOpen, onClose }: AuthModalProps) {
+  const { login } = useAuth()
   const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin')
+  const [name, setName] = useState('Bob')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -29,14 +32,14 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setIsLoading(true)
 
     try {
-      const endpoint = activeTab === 'signin' ? '/api/auth/signin' : '/api/auth/signup'
+      const endpoint = process.env.NEXT_PUBLIC_SERVER_ENDPOINT + (activeTab === 'signin' ? '/api/auth/login' : '/api/auth/register');
 
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ name, email, password, role: "patient" }),
       })
 
       if (!response.ok) {
@@ -47,6 +50,12 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
       const data = await response.json()
       console.log('Auth successful:', data)
 
+      if (activeTab === "signin") {
+        // user token
+        // store data.access_token
+        // and data.user
+        login(data.access_token, data.user)
+      }
       // Handle successful auth (e.g., store token, redirect, etc.)
       onClose()
       setEmail('')
@@ -126,6 +135,21 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <span>{error}</span>
+            </div>
+          )}
+
+          {activeTab === 'signup' && (
+            <div>            <label htmlFor="email" className="block text-sm font-medium text-health-dark mb-2">
+              Name
+            </label>
+              <input
+                type="text"
+                id="email"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-health-primary/20 focus:border-health-primary transition-colors text-sm"
+              />
             </div>
           )}
 
