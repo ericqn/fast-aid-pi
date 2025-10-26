@@ -38,6 +38,17 @@ type ConversationResponse = {
   updated_at: string
 }
 
+type PrediagnosisResponse = {
+  id: number
+  conversation_id: string
+  patient_id: number
+  potential_diseases: string
+  course_of_action: string
+  support_messages: string
+  recommended_practitioners: string
+  created_at: string
+}
+
 export default function Home() {
   const [chats, setChats] = useState<Chat[]>([])
   const { user, isAuthenticated, token, isLoading: authLoading } = useAuth()
@@ -49,6 +60,8 @@ export default function Home() {
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
   const [loadedConversations, setLoadedConversations] = useState<Set<string>>(new Set());
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [isFinishedQuestionnaire, setIsFinishedQuestionnaire] = useState(false);
+  const [isLoadingPrediagnoses, setIsLoadingPrediagnoses] = useState(false);
   const [actionItems, setActionItems] = useState<ActionItem[]>([
     {
       id: '1',
@@ -72,6 +85,8 @@ export default function Home() {
       createdAt: new Date(Date.now() - 86400000),
     },
   ]);
+
+
 
   // Fetch conversations from API
   const fetchConversations = async () => {
@@ -194,6 +209,45 @@ export default function Home() {
       return null;
     }
   };
+  const fetchPrediagnoses = async () => {
+    if (!token) return;
+
+    setIsLoadingPrediagnoses(true);
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_SERVER_ENDPOINT}/api/prediagnosis/my`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch prediagnoses');
+      }
+
+      const prediagnoses: PrediagnosisResponse[] = await response.json();
+
+      // Transform prediagnoses into action items
+      const transformedActions: ActionItem[] = prediagnoses.map((prediag) => ({
+        id: prediag.id.toString(),
+        title: 'Pre-diagnosis Result',
+        description: prediag.course_of_action,
+        priority: 'high' as const,
+        createdAt: new Date(prediag.created_at),
+      }));
+
+      setActionItems(transformedActions);
+    } catch (error) {
+      console.error('Error fetching prediagnoses:', error);
+    } finally {
+      setIsLoadingPrediagnoses(false);
+    }
+  };
+
   // Load conversations when auth is ready and token is available
   useEffect(() => {
     // Wait for auth to finish loading
@@ -205,6 +259,9 @@ export default function Home() {
     } else {
       // Clear chats if user is not authenticated
       setChats([]);
+    }
+    if (isAuthenticated && token) {
+      fetchPrediagnoses();
     }
   }, [authLoading, isAuthenticated, token]);
 
@@ -770,7 +827,7 @@ export default function Home() {
             </div>
           ))}
           {currentChat?.messages.length === 1 && (
-            <Questionnaire />
+            <Questionnaire onSubmit={() => setIsFinishedQuestionnaire(true)} conversationId={activeChat} />
           )}
         </div>
 
@@ -795,7 +852,7 @@ export default function Home() {
               </div>
               <button
                 onClick={handleSendMessage}
-                disabled={!inputMessage.trim()}
+                disabled={!inputMessage.trim() && !isFinishedQuestionnaire}
                 className="bg-health-primary text-white p-4 rounded-2xl hover:bg-health-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -861,25 +918,26 @@ export default function Home() {
             <p className="text-sm text-health-gray">
               {actionItems.length} {actionItems.length === 1 ? 'action' : 'actions'}
             </p>
+            {isLoadingPrediagnoses && (
+              <span className="text-xs text-health-gray">Loading...</span>
+            )}
           </div>
 
           {/* Action Items List */}
           {actionItems.length > 0 ? (
             <div className="space-y-3">
               {actionItems.map((item) => {
-                const colors = getPriorityColor(item.priority)
                 return (
                   <div
                     key={item.id}
-                    className={`${colors.bg} border ${colors.border} rounded-xl p-4 transition-all hover:shadow-md`}
+                    className="bg-green-50 border border-green-200 rounded-xl p-4 transition-all hover:shadow-md"
                   >
                     <div className="flex items-start justify-between gap-3 mb-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-semibold text-health-dark text-sm">{item.title}</h4>
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${colors.badge} font-medium uppercase`}>
-                            {item.priority}
-                          </span>
+                          <h4 className="font-semibold text-health-dark text-sm">
+                            {item.title} - {new Date(item.createdAt).toLocaleDateString()}
+                          </h4>
                         </div>
                         <p className="text-sm text-health-gray leading-relaxed">{item.description}</p>
                       </div>
@@ -892,12 +950,6 @@ export default function Home() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                       </button>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs text-health-gray mt-2">
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span>{new Date(item.createdAt).toLocaleDateString()}</span>
                     </div>
                   </div>
                 )
