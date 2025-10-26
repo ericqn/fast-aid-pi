@@ -53,8 +53,6 @@ class MedicalHistoryUpdate(BaseModel):
 
 class PrediagnosisRequest(BaseModel):
     symptoms: List[str] = Field(..., min_items=1)
-    duration: str
-    age: Optional[int] = None
     conversation_id: Optional[str] = None
 
 

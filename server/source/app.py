@@ -412,8 +412,6 @@ def create_prediagnosis(
     # Build patient data
     patient_data = {
         "symptoms": request.symptoms,
-        "duration": request.duration,
-        "age": request.age or current_user.medical_history.get("age") if current_user.medical_history else None
     }
 
     # Get medical history

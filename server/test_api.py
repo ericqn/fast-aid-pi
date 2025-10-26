@@ -130,8 +130,6 @@ def test_create_prediagnosis(token, conversation_id=None):
     headers = {"Authorization": f"Bearer {token}"}
     data = {
         "symptoms": ["headache", "dizziness", "fatigue"],
-        "duration": "3 days",
-        "age": 45
     }
     if conversation_id:
         data["conversation_id"] = conversation_id
@@ -252,7 +250,7 @@ def run_all_tests():
         test_assign_doctor(token, sample_id)
         test_remove_doctor(token, sample_id)
         # Test 8: Create prediagnosis
-        # test_create_prediagnosis(token, conversation_id)
+        test_create_prediagnosis(token, sample_id)
 
         # Test 9: Unauthorized access
         test_unauthorized_access()

@@ -1,0 +1,15 @@
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# virtual env files
+.venv
+
+# env files
+.env
+
+# created db files:
+database.db
