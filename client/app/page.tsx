@@ -1,7 +1,10 @@
 'use client'
 
+import { useAuth } from '@/components/AuthContext'
 import { AuthModal } from '@/components/AuthModal'
+import { InlineMarkdownRenderer } from '@/components/MarkdownParser'
 import { Questionnaire } from '@/components/Questionnaire'
+import { UserProfile } from '@/components/UserProfile'
 import { useEffect, useState } from 'react'
 
 type Message = {
@@ -26,23 +29,26 @@ type ActionItem = {
   createdAt: Date
 }
 
-export default function Home() {
-  const [chats, setChats] = useState<Chat[]>([
-    {
-      id: '1',
-      title: 'Medication Questions',
-      messages: [
-        { id: '1', content: 'Hello! How can I help you today?', role: 'assistant', timestamp: new Date() }
-      ],
-      lastUpdated: new Date()
-    }
-  ])
+type ConversationResponse = {
+  id: string
+  patient_id: number
+  doctor_id?: number | null
+  title: string
+  created_at: string
+  updated_at: string
+}
 
-  const [activeChat, setActiveChat] = useState<string>('1')
+export default function Home() {
+  const [chats, setChats] = useState<Chat[]>([])
+  const { user, isAuthenticated, token, isLoading: authLoading } = useAuth()
+  const [activeChat, setActiveChat] = useState<string>('')
   const [inputMessage, setInputMessage] = useState('')
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
+  const [isLoadingConversations, setIsLoadingConversations] = useState(false);
+  const [loadedConversations, setLoadedConversations] = useState<Set<string>>(new Set());
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [actionItems, setActionItems] = useState<ActionItem[]>([
     {
       id: '1',
@@ -66,6 +72,148 @@ export default function Home() {
       createdAt: new Date(Date.now() - 86400000),
     },
   ]);
+
+  // Fetch conversations from API
+  const fetchConversations = async () => {
+    setIsLoadingConversations(true);
+    try {
+      const response = await fetch(
+        process.env.NEXT_PUBLIC_SERVER_ENDPOINT + '/api/conversations/',
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch conversations: ${response.statusText}`);
+      }
+
+      const conversations: ConversationResponse[] = await response.json();
+
+      // Create chats with empty messages
+      const apiChats: Chat[] = conversations.map(conv => ({
+        id: conv.id,
+        title: conv.title,
+        messages: [], // Will be loaded on demand
+        lastUpdated: new Date(conv.updated_at)
+      }));
+
+      setChats(apiChats);
+
+      // Set the first chat as active if available
+      if (apiChats.length > 0) {
+        setActiveChat(apiChats[0].id);
+      }
+    } catch (error) {
+      console.error('Error fetching conversations:', error);
+    } finally {
+      setIsLoadingConversations(false);
+    }
+  };
+  const loadConversationMessages = async (conversationId: string) => {
+    // Don't reload if already loaded
+    if (loadedConversations.has(conversationId)) {
+      return;
+    }
+
+    if (!token) return;
+    setIsLoadingMessages(true);
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_SERVER_ENDPOINT}/api/conversations/${conversationId}/messages`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to load messages');
+      }
+
+      const messages = await response.json();
+
+      // Transform messages
+      const transformedMessages: Message[] = messages.map((msg: any) => ({
+        id: msg.id,
+        content: msg.content,
+        role: msg.role,
+        timestamp: new Date(msg.created_at),
+      }));
+
+      // Update the chat with loaded messages
+      setChats(prevChats =>
+        prevChats.map(chat =>
+          chat.id === conversationId
+            ? { ...chat, messages: transformedMessages }
+            : chat
+        )
+      );
+
+      // Mark as loaded
+      setLoadedConversations(prev => new Set([...prev, conversationId]));
+    } catch (error) {
+      console.error('Error loading conversation messages:', error);
+    } finally {
+      setIsLoadingMessages(false);
+    }
+  };
+
+  // Create a new conversation via API
+  const createConversationAPI = async (title: string): Promise<ConversationResponse | null> => {
+    if (!token) {
+      console.log('No token available, cannot create conversation');
+      return null;
+    }
+
+    try {
+      const response = await fetch(process.env.NEXT_PUBLIC_SERVER_ENDPOINT + '/api/conversations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ title }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to create conversation: ${response.statusText}`);
+      }
+
+      const newConversation: ConversationResponse = await response.json();
+      return newConversation;
+    } catch (error) {
+      console.error('Error creating conversation:', error);
+      return null;
+    }
+  };
+  // Load conversations when auth is ready and token is available
+  useEffect(() => {
+    // Wait for auth to finish loading
+    if (authLoading) return;
+
+    // Only fetch if user is authenticated
+    if (isAuthenticated && token) {
+      fetchConversations();
+    } else {
+      // Clear chats if user is not authenticated
+      setChats([]);
+    }
+  }, [authLoading, isAuthenticated, token]);
+
+  // Load messages when active chat changes
+  useEffect(() => {
+    if (activeChat && token && isAuthenticated) {
+      loadConversationMessages(activeChat);
+    }
+  }, [activeChat, token, isAuthenticated]);
 
   // Set right sidebar open on desktop by default
   useEffect(() => {
@@ -91,50 +239,354 @@ export default function Home() {
 
   const currentChat = chats.find(chat => chat.id === activeChat)
 
-  const handleSendMessage = () => {
-    if (!inputMessage.trim() || !activeChat) return
 
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim() || !activeChat || !token) return;
+
+    const userMessageContent = inputMessage;
+
+    // Clear input immediately for better UX
+    setInputMessage('');
+
+    // Create user message object
     const newMessage: Message = {
-      id: Date.now().toString(),
-      content: inputMessage,
+      id: new Date().getTime().toString(),
+      content: userMessageContent,
       role: 'user',
       timestamp: new Date()
-    }
+    };
 
-    const assistantMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      content: 'Thank you for your message. This is a demo response from your healthcare assistant.',
-      role: 'assistant',
-      timestamp: new Date()
-    }
+    // Add user message to UI immediately
+    setChats(prevChats =>
+      prevChats.map(chat =>
+        chat.id === activeChat
+          ? { ...chat, messages: [...chat.messages, newMessage], lastUpdated: new Date() }
+          : chat
+      )
+    );
 
-    setChats(chats.map(chat =>
-      chat.id === activeChat
-        ? {
-          ...chat,
-          messages: [...chat.messages, newMessage, assistantMessage],
-          lastUpdated: new Date()
+    try {
+      // 1. Save user message to your backend
+      const userMessageResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_SERVER_ENDPOINT}/api/conversations/${activeChat}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            role: 'user',
+            content: userMessageContent,
+          }),
         }
-        : chat
-    ))
+      );
 
-    setInputMessage('')
-  }
+      if (!userMessageResponse.ok) {
+        throw new Error('Failed to save user message to server');
+      }
 
-  const createNewChat = () => {
-    const newChat: Chat = {
-      id: Date.now().toString(),
-      title: 'New Conversation',
-      messages: [
-        { id: '1', content: 'Hello! How can I assist you today?', role: 'assistant', timestamp: new Date() },
-        { id: 'questionaire', content: <Questionnaire />, role: 'assistant', timestamp: new Date() }
-      ],
-      lastUpdated: new Date()
+      const savedUserMessage = await userMessageResponse.json();
+
+      // Update the user message with the server-generated ID
+      setChats(prevChats =>
+        prevChats.map(chat =>
+          chat.id === activeChat
+            ? {
+              ...chat,
+              messages: chat.messages.map(msg =>
+                msg.id === newMessage.id
+                  ? { ...msg, id: savedUserMessage.id || msg.id }
+                  : msg
+              ),
+            }
+            : chat
+        )
+      );
+
+      // 2. Create placeholder for assistant message
+      const assistantMessageId = (Date.now() + 1).toString();
+      const assistantMessage: Message = {
+        id: assistantMessageId,
+        content: '',
+        role: 'assistant',
+        timestamp: new Date()
+      };
+
+      // Add placeholder assistant message to UI
+      setChats(prevChats =>
+        prevChats.map(chat =>
+          chat.id === activeChat
+            ? { ...chat, messages: [...chat.messages, assistantMessage] }
+            : chat
+        )
+      );
+
+      // 3. Get conversation history for context
+      const currentChatMessages = chats.find(chat => chat.id === activeChat)?.messages || [];
+
+      // Format messages for Anthropic API (include the new user message)
+      const apiMessages = [...currentChatMessages, newMessage].map(msg => ({
+        role: msg.role,
+        content: typeof msg.content === 'string' ? msg.content : '',
+      }));
+
+      // 4. Call Anthropic API for AI response
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: apiMessages,
+          conversationId: activeChat,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get response from AI');
+      }
+
+      // 5. Handle streaming response from Anthropic
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullContent = '';
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+
+                if (data.text) {
+                  fullContent += data.text;
+
+                  // Update the assistant message with accumulated content in real-time
+                  setChats(prevChats =>
+                    prevChats.map(chat =>
+                      chat.id === activeChat
+                        ? {
+                          ...chat,
+                          messages: chat.messages.map(msg =>
+                            msg.id === assistantMessageId
+                              ? { ...msg, content: fullContent }
+                              : msg
+                          ),
+                        }
+                        : chat
+                    )
+                  );
+                }
+
+                if (data.error) {
+                  throw new Error(data.error);
+                }
+              } catch (e) {
+                // Ignore parsing errors for incomplete chunks
+              }
+            }
+          }
+        }
+      }
+
+      // 6. After streaming completes, save assistant message to your backend
+      if (fullContent) {
+        const assistantMessageResponse = await fetch(
+          `${process.env.NEXT_PUBLIC_SERVER_ENDPOINT}/api/conversations/${activeChat}/messages`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              role: 'assistant',
+              content: fullContent,
+            }),
+          }
+        );
+
+        if (!assistantMessageResponse.ok) {
+          console.error('Failed to save assistant message to server');
+          // Don't throw here - the message is already displayed to the user
+        } else {
+          const savedAssistantMessage = await assistantMessageResponse.json();
+
+          // Update the assistant message with the server-generated ID
+          setChats(prevChats =>
+            prevChats.map(chat =>
+              chat.id === activeChat
+                ? {
+                  ...chat,
+                  messages: chat.messages.map(msg =>
+                    msg.id === assistantMessageId
+                      ? {
+                        ...msg,
+                        id: savedAssistantMessage.id || msg.id,
+                        timestamp: new Date(savedAssistantMessage.created_at || msg.timestamp)
+                      }
+                      : msg
+                  ),
+                }
+                : chat
+            )
+          );
+        }
+      }
+
+    } catch (error) {
+      console.error('Error sending message:', error);
+
+      // Show error message to user
+      const errorMessageId = (Date.now() + 2).toString();
+      const errorMessage: Message = {
+        id: errorMessageId,
+        content: 'Sorry, I encountered an error. Please try again.',
+        role: 'assistant',
+        timestamp: new Date()
+      };
+
+      setChats(prevChats =>
+        prevChats.map(chat =>
+          chat.id === activeChat
+            ? {
+              ...chat,
+              messages: chat.messages.filter(msg => msg.content !== ''), // Remove empty placeholder
+            }
+            : chat
+        )
+      );
+
+      // Add error message
+      setChats(prevChats =>
+        prevChats.map(chat =>
+          chat.id === activeChat
+            ? {
+              ...chat,
+              messages: [...chat.messages, errorMessage],
+            }
+            : chat
+        )
+      );
     }
-    setChats([newChat, ...chats])
-    setActiveChat(newChat.id)
-  }
+  };
 
+  const createNewChat = async () => {
+    // Check if user is authenticated
+    if (!isAuthenticated) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    // Create conversation via API
+    const now = new Date();
+    const newConversation = await createConversationAPI(`${now.toLocaleDateString()} ${now.getHours()}:${now.getMinutes()}`);
+
+    if (newConversation) {
+      // Create the initial greeting message
+      const greetingMessage = {
+        role: 'assistant',
+        content: 'Hello! How can I assist you today?'
+      };
+
+      // Save the greeting message to backend
+      try {
+        const greetingResponse = await fetch(
+          `${process.env.NEXT_PUBLIC_SERVER_ENDPOINT}/api/conversations/${newConversation.id}/messages`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(greetingMessage),
+          }
+        );
+
+        let savedGreetingId = '1';
+        if (greetingResponse.ok) {
+          const savedGreeting = await greetingResponse.json();
+          savedGreetingId = savedGreeting.id;
+        }
+
+        // Add the new conversation to local state with initial greeting
+        const newChat: Chat = {
+          id: newConversation.id,
+          title: newConversation.title,
+          messages: [
+            {
+              id: savedGreetingId,
+              content: 'Hello! How can I assist you today?',
+              role: 'assistant',
+              timestamp: new Date(newConversation.created_at)
+            }
+          ],
+          lastUpdated: new Date(newConversation.updated_at)
+        };
+
+        setChats([newChat, ...chats]);
+        setActiveChat(newChat.id);
+
+        // Close sidebar on mobile
+        if (window.innerWidth < 1024) {
+          setIsSidebarOpen(false);
+        }
+      } catch (error) {
+        console.error('Error saving greeting message:', error);
+
+        // Still add the chat to UI even if greeting message save fails
+        const newChat: Chat = {
+          id: newConversation.id,
+          title: newConversation.title,
+          messages: [
+            {
+              id: '1',
+              content: 'Hello! How can I assist you today?',
+              role: 'assistant',
+              timestamp: new Date(newConversation.created_at)
+            }
+          ],
+          lastUpdated: new Date(newConversation.updated_at)
+        };
+
+        setChats([newChat, ...chats]);
+        setActiveChat(newChat.id);
+
+        if (window.innerWidth < 1024) {
+          setIsSidebarOpen(false);
+        }
+      }
+    } else {
+      // Fallback to local-only chat if API fails
+      const newChat: Chat = {
+        id: Date.now().toString(),
+        title: 'New Conversation',
+        messages: [
+          {
+            id: '1',
+            content: 'Hello! How can I assist you today?',
+            role: 'assistant',
+            timestamp: new Date()
+          }
+        ],
+        lastUpdated: new Date()
+      };
+
+      setChats([newChat, ...chats]);
+      setActiveChat(newChat.id);
+
+      if (window.innerWidth < 1024) {
+        setIsSidebarOpen(false);
+      }
+    }
+  };
   const deleteChat = (chatId: string) => {
     const filteredChats = chats.filter(chat => chat.id !== chatId)
     setChats(filteredChats)
@@ -210,9 +662,6 @@ export default function Home() {
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
                   <h3 className="font-medium text-sm text-health-dark truncate">{chat.title}</h3>
-                  <p className="text-xs text-health-gray mt-1">
-                    {chat.messages.length} messages
-                  </p>
                 </div>
                 <button
                   onClick={(e) => {
@@ -231,18 +680,19 @@ export default function Home() {
         </div>
 
         {/* Sidebar Footer */}
-        <div className="p-4 border-t border-gray-200 bg-gray-50">
-          <button
-            onClick={() => setIsAuthModalOpen(true)}
-            className="w-full bg-health-primary text-white px-4 py-2.5 rounded-lg hover:bg-health-secondary transition-colors flex items-center justify-center gap-2 font-medium text-sm"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-            Sign In / Sign Up
-          </button>
-        </div>
-
+        {user ? <UserProfile /> :
+          <div className="p-4 border-t border-gray-200 bg-gray-50">
+            <button
+              onClick={() => setIsAuthModalOpen(true)}
+              className="w-full bg-health-primary text-white px-4 py-2.5 rounded-lg hover:bg-health-secondary transition-colors flex items-center justify-center gap-2 font-medium text-sm"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              Sign In / Sign Up
+            </button>
+          </div>
+        }
         {/* Sidebar Footer */}
         <div className="p-4 border-t border-gray-200 bg-gray-50">
           <div className="flex items-center gap-3 text-xs text-health-gray">
@@ -276,6 +726,15 @@ export default function Home() {
         </div>
 
         {/* Messages */}
+        {/* Buffer if messages are loading  */}
+        {isLoadingMessages && currentChat?.messages.length === 0 && (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-health-primary mx-auto mb-4"></div>
+              <p className="text-health-gray">Loading messages...</p>
+            </div>
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {currentChat?.messages.map(message => (
             <div
@@ -297,7 +756,7 @@ export default function Home() {
                   }`}
               >
                 {typeof message.content === "string" ?
-                  <p className="text-sm leading-relaxed">{message.content as String}</p> : <>{message.content}</>
+                  <InlineMarkdownRenderer content={message.content as string} /> : <>{message.content}</>
                 }
               </div>
 
@@ -310,6 +769,9 @@ export default function Home() {
               )}
             </div>
           ))}
+          {currentChat?.messages.length === 1 && (
+            <Questionnaire />
+          )}
         </div>
 
         {/* Input Area */}
